@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.omnifixpos"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 34
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -21,14 +21,13 @@ android {
     defaultConfig {
         applicationId = "com.example.omnifixpos"
         minSdk = 21
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
     }
 
     buildTypes {
         release {
-            // Secret Signing Key မလိုဘဲ တန်း Build နိုင်အောင် Debug Key အသုံးပြုထားပါသည်
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false

@@ -15,9 +15,9 @@ dependencies:
     sdk: flutter
 
     # ဒီလိုင်းများ အပြည့်အဝ ပါရပါမည်
-  firebase_core: ^3.1.0
-  cloud_firestore: ^5.0.1
-  firebase_auth: ^5.1.0
+  firebase_core: 
+  cloud_firestore: 
+  firebase_auth: 
   connectivity_plus: ^6.0.3
   http: ^1.2.1
 

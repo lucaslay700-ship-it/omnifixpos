@@ -1,0 +1,175 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import '../models/branch_sync_model.dart'; // Imports ShopLicenseModel & BranchSyncQueue
+
+// ==========================================
+// 1. AI DIAGNOSTIC ITEM MODEL
+// ==========================================
+
+class AIDiagnosticItem {
+  final String ticketId;
+  final String phoneModel;
+  final String symptom;
+  final List<String> aiSuggestedFixes;
+  final double estimatedCost;
+  final DateTime createdAt;
+
+  AIDiagnosticItem({
+    required this.ticketId,
+    required this.phoneModel,
+    required this.symptom,
+    required this.aiSuggestedFixes,
+    required this.estimatedCost,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'ticketId': ticketId,
+        'phoneModel': phoneModel,
+        'symptom': symptom,
+        'aiSuggestedFixes': aiSuggestedFixes,
+        'estimatedCost': estimatedCost,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory AIDiagnosticItem.fromJson(Map<String, dynamic> json) => AIDiagnosticItem(
+        ticketId: json['ticketId'],
+        phoneModel: json['phoneModel'],
+        symptom: json['symptom'],
+        aiSuggestedFixes: List<String>.from(json['aiSuggestedFixes']),
+        estimatedCost: (json['estimatedCost'] as num).toDouble(),
+        createdAt: DateTime.parse(json['createdAt']),
+      );
+}
+
+// ==========================================
+// 2. SAAS MULTI-TENANT BACKEND & CRUD ENGINE
+// ==========================================
+
+class MultiTenantAIBackendService {
+  static const String _syncBoxName = 'branch_sync_queue_box';
+  static const String _aiBoxName = 'ai_diagnostics_box';
+
+  static Box<Map>? _syncQueueBox;
+  static Box<Map>? _aiBox;
+
+  // Initialize Database Engine
+  static Future<void> init() async {
+    _syncQueueBox = await Hive.openBox<Map>(_syncBoxName);
+    _aiBox = await Hive.openBox<Map>(_aiBoxName);
+  }
+
+  // ------------------------------------------
+  // A. SAAS LICENSE GUARD
+  // ------------------------------------------
+  static bool checkLicenseGuard(ShopLicenseModel license) {
+    if (!license.isAccessAllowed) {
+      debugPrint("Access Denied: Shop ${license.shopId} is Suspended or Expired.");
+      return false;
+    }
+    return true;
+  }
+
+  // ------------------------------------------
+  // B. BRANCH SYNC QUEUE FULL CRUD
+  // ------------------------------------------
+
+  // CREATE: Sync Queue ထဲသို့ Data သစ် ထည့်သွင်းခြင်း
+  static Future<bool> enqueueAction({
+    required ShopLicenseModel license,
+    required String queueId,
+    required String branchId,
+    required String actionType,
+    required Map<String, dynamic> payload,
+  }) async {
+    if (!checkLicenseGuard(license)) return false;
+
+    final queueItem = BranchSyncQueue(
+      queueId: queueId,
+      branchId: branchId,
+      actionType: actionType,
+      payload: payload,
+      timestamp: DateTime.now(),
+      isSynced: false,
+    );
+
+    await _syncQueueBox?.put(queueId, queueItem.toJson());
+    return true;
+  }
+
+  // READ: Sync မလုပ်ရသေးသော Queue များကို ဆွဲထုတ်ခြင်း
+  static List<BranchSyncQueue> getPendingSyncList(ShopLicenseModel license) {
+    if (!checkLicenseGuard(license) || _syncQueueBox == null) return [];
+
+    List<BranchSyncQueue> list = [];
+    for (var val in _syncQueueBox!.values) {
+      final jsonMap = Map<String, dynamic>.from(val);
+      final queue = BranchSyncQueue.fromJson(jsonMap);
+      if (!queue.isSynced) {
+        list.add(queue);
+      }
+    }
+    return list;
+  }
+
+  // UPDATE: Sync လုပ်ဆောင်ပြီးပါက Status ကို Synced ဟု ပြောင်းခြင်း
+  static Future<void> markAsSynced(String queueId) async {
+    final rawData = _syncQueueBox?.get(queueId);
+    if (rawData != null) {
+      final jsonMap = Map<String, dynamic>.from(rawData);
+      jsonMap['isSynced'] = true;
+      await _syncQueueBox?.put(queueId, jsonMap);
+    }
+  }
+
+  // DELETE: Queue ထဲမှ Data ကို ဖျက်ထုတ်ခြင်း
+  static Future<void> deleteQueueItem(String queueId) async {
+    await _syncQueueBox?.delete(queueId);
+  }// ------------------------------------------
+  // C. AI DIAGNOSTICS SMART FEATURES CRUD
+  // ------------------------------------------
+
+  // CREATE / UPDATE: AI စစ်ဆေးချက် ရလဒ်များကို သိမ်းဆည်းခြင်း
+  static Future<bool> saveAIDiagnosticRecord({
+    required ShopLicenseModel license,
+    required AIDiagnosticItem item,
+  }) async {
+    if (!checkLicenseGuard(license)) return false;
+
+    await _aiBox?.put(item.ticketId, item.toJson());
+
+    // Sync Queue သို့ အလိုအလျောက် ပေးပို့ခြင်း
+    await enqueueAction(
+      license: license,
+      queueId: "SYNC_AI_${item.ticketId}_${DateTime.now().millisecondsSinceEpoch}",
+      branchId: license.shopId,
+      actionType: "AI_DIAGNOSTIC_SAVE",
+      payload: item.toJson(),
+    );
+
+    return true;
+  }
+
+  // READ: Ticket ID ဖြင့် AI Record ကို ပြန်လည်ရှာဖွေခြင်း
+  static AIDiagnosticItem? getAIDiagnosticRecord(String ticketId) {
+    final rawData = _aiBox?.get(ticketId);
+    if (rawData != null) {
+      return AIDiagnosticItem.fromJson(Map<String, dynamic>.from(rawData));
+    }
+    return null;
+  }
+
+  // READ ALL: AI Diagnostics မှတ်တမ်း အားလုံး ရယူခြင်း
+  static List<AIDiagnosticItem> getAllAIDiagnostics() {
+    if (_aiBox == null) return [];
+    return _aiBox!.values
+        .map((val) => AIDiagnosticItem.fromJson(Map<String, dynamic>.from(val)))
+        .toList();
+  }
+
+  // DELETE: AI Diagnostic Record ဖျက်ထုတ်ခြင်း
+  static Future<void> deleteAIDiagnosticRecord(String ticketId) async {
+    await _aiBox?.delete(ticketId);
+  }
+}

@@ -1,0 +1,145 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+
+class FirebaseCoreService {
+  // Firebase Initialize လုပ်ပေးသည့် Service
+  static Future<void> initializeFirebase() async {
+    try {
+      await Firebase.initializeApp();
+      debugPrint("Firebase Core Initialized Successfully");
+    } catch (e) {
+      debugPrint("Firebase Core Initialization Failed/Offline: $e");
+    }
+  }
+
+  // Multi-Tenant Data Syncing Stub
+  static Future<bool> checkCloudConnection() async {
+    await Future.delayed(const Duration(seconds: 1));
+    return true;
+  }
+}
+
+class FirebaseCoreService {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // Active User / Tenant ID ရယူခြင်း
+  String? get currentUserId => _auth.currentUser?.uid;
+
+  // ---------------------------------------------------------------------------
+  // ၁။ AUTHENTICATION CORE (အကောင့် Login / Logout ပြုလုပ်ခြင်း)
+  // ---------------------------------------------------------------------------
+  Future<UserCredential?> loginTenantUser(String email, String password) async {
+    try {
+      UserCredential credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      return credential;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> logoutUser() async {
+    await _auth.signOut();
+  }
+
+  // ---------------------------------------------------------------------------
+  // ၂။ FIRESTORE CORE (Repairs, Inventory, Certificates Data Management)
+  // ---------------------------------------------------------------------------
+
+  // (A) ပြုပြင်ရေး Job Voucher စာရင်း ထည့်သွင်းခြင်း
+  Future<void> createRepairJob({
+    required String voucherId,
+    required String customerName,
+    required String customerPhone,
+    required String deviceModel,
+    required String issueDescription,
+    required double estimatedCost,
+  }) async {
+    final uid = currentUserId;
+    if (uid == null) throw Exception("Unauthorized user login.");
+
+    await _db
+        .collection('tenants')
+        .doc(uid)
+        .collection('repairs')
+        .doc(voucherId)
+        .set({
+      'voucher_id': voucherId,
+      'customer_name': customerName,
+      'customer_phone': customerPhone,
+      'device_model': deviceModel,
+      'issue_description': issueDescription,
+      'estimated_cost': estimatedCost,
+      'status': 'PENDING', // PENDING, IN_PROGRESS, COMPLETED
+      'created_at': FieldValue.serverTimestamp(),
+      'tenant_id': uid,
+    });
+  }
+
+  // (B) အပိုပစ္စည်း (Inventory) စာရင်း အလျော့အတင်း လုပ်ခြင်း
+  Future<void> updateInventoryStock(String partId, int quantityChange) async {
+    final uid = currentUserId;
+    if (uid == null) throw Exception("Unauthorized user login.");
+
+    DocumentReference docRef = _db
+        .collection('tenants')
+        .doc(uid)
+        .collection('inventory')
+        .doc(partId);
+
+    await _db.runTransaction((transaction) async {
+      DocumentSnapshot snapshot = await transaction.get(docRef);
+      if (!snapshot.exists) {
+        throw Exception("Inventory item not found.");
+      }
+      int currentStock = snapshot.get('stock') ?? 0;
+      transaction.update(docRef, {'stock': currentStock + quantityChange});
+    });
+  }
+
+  // (C) QC Warranty Certificate စာရွက်စာတမ်း ထုတ်ပေးခြင်း (Step 13 အတွက်)
+  Future<void> issueDigitalWarranty({
+    required String certificateId,
+    required String voucherId,
+    required int warrantyDays,
+  }) async {
+    final uid = currentUserId;
+    if (uid == null) throw Exception("Unauthorized user login.");
+
+    await _db
+        .collection('tenants')
+        .doc(uid)
+        .collection('certificates')
+        .doc(certificateId)
+        .set({
+      'certificate_id': certificateId,
+      'voucher_id': voucherId,
+      'warranty_days': warrantyDays,
+      'issued_date': FieldValue.serverTimestamp(),
+      'is_valid': true,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // ၃။ CUSTOMER STATUS PORTAL LOOKUP (Step 14 အတွက် အကောင့်မလိုဘဲ စစ်ဆေးသည့် စနစ်)
+  // ---------------------------------------------------------------------------
+  Future<Map<String, dynamic>?> checkRepairStatusPublic({
+    required String tenantId,
+    required String voucherId,
+  }) async {
+    DocumentSnapshot doc = await _db
+        .collection('tenants')
+        .doc(tenantId)
+        .collection('repairs')
+        .doc(voucherId)
+        .get();if (doc.exists) {
+      return doc.data() as Map<String, dynamic>?;
+    }
+    return null;
+  }
+}

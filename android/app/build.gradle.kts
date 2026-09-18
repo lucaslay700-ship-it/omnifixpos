@@ -47,11 +47,6 @@ kotlin {
 flutter {
     source = "../.."
 }
-plugins {
-    id "com.android.application"
-    id "kotlin-android"
-    id "dev.flutter.flutter-gradle-plugin"
-}
 
 android {
     namespace "com.example.omnifixpos"

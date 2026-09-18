@@ -1,8 +1,10 @@
-name: Build Android APK
+name: Build Release APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -10,23 +12,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Set up Java JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'
+          flutter-version: '3.29.0'
+          channel: 'stable'
+          cache: true
 
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build Release APK
+      - name: Make Gradlew Executable
+        run: chmod +x android/gradlew
+
+      - name: Clean Flutter Project
+        run: flutter clean
+
+      - name: Build APK
         run: flutter build apk --release
 
       - name: Upload APK Artifact

@@ -30,12 +30,6 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Make Gradlew Executable
-        run: chmod +x android/gradlew
-
-      - name: Clean Flutter Project
-        run: flutter clean
-
       - name: Build APK
         run: flutter build apk --release
 

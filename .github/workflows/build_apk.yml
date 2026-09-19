@@ -2,10 +2,9 @@ name: Build Release APK
 
 on:
   push:
-    branches:
-      - main
-      - master
-  workflow_dispatch:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
   build:
@@ -25,6 +24,17 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
+
+      - name: Cache Gradle Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('/*.gradle*', '/*.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Make Gradlew Executable
         run: chmod +x android/gradlew
@@ -32,8 +42,8 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build APK 
-        run: flutter build apk --release 
+      - name: Build APK
+        run: flutter build apk --release --suppress-analytics
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4

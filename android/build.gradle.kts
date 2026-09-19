@@ -18,7 +18,7 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// AGP 9 အတွက် DSL အသစ် သုံးရန်
+// AGP 8.3.    အတွက် DSL အသစ် သုံးရန်
 extensions.configure<ApplicationExtension> {
     namespace = "com.example.omnifixpos"
     compileSdk = 34
